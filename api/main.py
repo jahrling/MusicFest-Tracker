@@ -159,7 +159,7 @@ async def index(request: Request):
     from collections import defaultdict
 
     festivals = queries.list_festivals()  # sorted name ASC, date DESC
-    bands = queries.list_bands_with_festivals(limit=2000)
+    bands = queries.list_bands_with_festivals()
 
     # Full rating data per band (latest entry wins, get_all_ratings is DESC by timestamp)
     rating_data: dict[str, dict] = {}

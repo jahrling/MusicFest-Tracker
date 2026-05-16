@@ -114,9 +114,9 @@ def upsert_band(name: str, **kwargs) -> str:
     return band_id
 
 
-def list_bands(limit: int = 500) -> list[dict]:
+def list_bands() -> list[dict]:
     conn = get_connection()
-    res = conn.execute(f"MATCH (b:Band) RETURN b.* LIMIT {limit}")
+    res = conn.execute("MATCH (b:Band) RETURN b.*")
     rows = _row_to_dict(res)
     return [{k.replace("b.", ""): v for k, v in r.items()} for r in rows]
 
@@ -502,9 +502,9 @@ def get_all_ratings(person_name: str = "default") -> list[dict]:
 
 # ── Band + festival enrichment ────────────────────────────────────────────────
 
-def list_bands_with_festivals(limit: int = 2000) -> list[dict]:
+def list_bands_with_festivals() -> list[dict]:
     """Return all bands annotated with their list of festival_ids."""
-    bands = list_bands(limit=limit)
+    bands = list_bands()
     if not bands:
         return bands
 
