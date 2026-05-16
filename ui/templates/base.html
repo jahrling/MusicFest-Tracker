@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}Festival Band Tracker{% endblock %}</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+  <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+  <script src="/static/js/app.js" defer></script>
+</head>
+<body>
+  <nav>
+    <a href="/" class="nav-brand">Festival Tracker</a>
+    <div class="nav-links">
+      <a href="/">Dashboard</a>
+      <a href="/timeline/view">Timeline</a>
+      <a href="/playlist/view">Playlist</a>
+    </div>
+  </nav>
+  <main>
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>

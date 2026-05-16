@@ -1,0 +1,40 @@
+# ── Core ─────────────────────────────────────────────────────────────────────
+anthropic>=0.40.0
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.0
+jinja2>=3.1.0
+python-multipart>=0.0.9
+httpx>=0.27.0
+Pillow>=10.0.0
+kuzu>=0.6.0
+spotipy>=2.24.0
+python-dotenv>=1.0.0
+
+# ── PaddleOCR (local vision backend) ─────────────────────────────────────────
+# Only needed when VISION_BACKEND=paddleocr in .env.
+#
+# Install ONE of the following depending on your hardware:
+#
+#   CPU (any machine, no GPU required — slower):
+#     pip install paddleocr paddlepaddle
+#
+#   GPU (NVIDIA CUDA — recommended once you have a GPU):
+#     pip install paddleocr paddlepaddle-gpu
+#
+# The paddleocr package is the same in both cases; only the backend differs.
+# Do NOT install both paddlepaddle and paddlepaddle-gpu at the same time.
+#
+# paddleocr>=2.7.0
+# paddlepaddle>=2.6.0        # CPU
+# paddlepaddle-gpu>=2.6.0    # GPU (uncomment instead of paddlepaddle)
+
+# ── Band validator (PaddleOCR path only) ─────────────────────────────────────
+# The validator uses:
+#   • iTunes Search API  — free, no credentials; httpx already handles this
+#   • Spotify artist search — uses the spotipy Client Credentials flow;
+#     spotipy is already in the core deps above
+#   • MusicBrainz — free REST API; httpx already handles this
+#
+# Dice.fm: they run a closed API for event operators only (no public search
+# endpoint). Their data is best accessed via the research agent's web_search
+# tool, which finds Dice.fm listings as part of upcoming-show research.

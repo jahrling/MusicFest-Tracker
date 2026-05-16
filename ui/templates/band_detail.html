@@ -1,0 +1,187 @@
+{% extends "base.html" %}
+{% block title %}{{ band.name }} — Festival Tracker{% endblock %}
+
+{% block content %}
+<!-- Keyboard hint bar + prev/next nav -->
+<div class="kbd-hint-bar">
+  <span class="hint"><kbd>←</kbd><kbd>→</kbd> navigate</span>
+  <span class="hint"><kbd>Tab</kbd> rate</span>
+  <span class="hint"><kbd>Esc</kbd> back</span>
+  <div class="band-nav">
+    <button class="nav-arrow" id="nav-prev" title="Previous band">&larr;</button>
+    <span class="band-pos" id="band-position"></span>
+    <button class="nav-arrow" id="nav-next" title="Next band">&rarr;</button>
+  </div>
+</div>
+
+<div class="band-detail">
+  <div class="band-detail-header">
+    <h1>{{ band.name }}</h1>
+    {% if band.bubble_status %}
+    <span class="bubble-badge bubble-badge--large status-{{ band.bubble_status }}">{{ band.bubble_status }}</span>
+    {% endif %}
+  </div>
+
+  <div class="grid-2">
+    <!-- Info card -->
+    <div class="card">
+      <h2>About</h2>
+      {% if band.notes %}<p>{{ band.notes }}</p>{% endif %}
+
+      {% if genres %}
+      <div class="info-row">
+        <strong>Genres:</strong>
+        {% for g in genres %}<span class="tag">{{ g }}</span>{% endfor %}
+      </div>
+      {% endif %}
+
+      {% if influences %}
+      <div class="info-row">
+        <strong>Influences:</strong>
+        {% for i in influences %}<span class="tag">{{ i }}</span>{% endfor %}
+      </div>
+      {% endif %}
+
+      {% if youtube_links %}
+      <div class="info-row">
+        <strong>Videos:</strong>
+        <ul class="link-list">
+          {% for link in youtube_links %}
+          <li><a href="{{ link }}" target="_blank" rel="noopener">{{ link }}</a></li>
+          {% endfor %}
+        </ul>
+      </div>
+      {% endif %}
+
+      <div class="action-row">
+        <form hx-post="/bands/{{ band.id }}/research" hx-target="#research-status" hx-swap="innerHTML" hx-indicator="#research-spinner">
+          <button type="submit" class="btn-secondary">Research Band</button>
+        </form>
+        <span id="research-spinner" class="htmx-indicator">Researching...</span>
+        <div id="research-status"></div>
+      </div>
+    </div>
+
+    <!-- Rating card -->
+    <div class="card">
+      <h2>Your Rating</h2>
+      {% if rating %}
+      <div class="current-rating">
+        <span class="score-badge">{{ rating['r.score'] }}/10</span>
+        <span class="interest-badge">{{ rating['r.interest'] }}</span>
+        {% if rating['r.notes'] %}<p class="rating-notes">{{ rating['r.notes'] }}</p>{% endif %}
+        <p class="muted">Rated {{ rating['r.timestamp'][:10] }}</p>
+      </div>
+      {% endif %}
+
+      <form hx-post="/bands/{{ band.id }}/rate" hx-target="#rate-status" hx-swap="innerHTML">
+        <label>Score (1–10)
+          <input id="score-input" type="number" name="score" min="1" max="10"
+                 value="{{ rating['r.score'] if rating else '' }}" required>
+        </label>
+        <label>Interest
+          <select name="interest">
+            {% for level in ['skip', 'curious', 'interested', 'must-see'] %}
+            <option value="{{ level }}" {% if rating and rating['r.interest'] == level %}selected{% endif %}>
+              {{ level }}
+            </option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>Notes
+          <textarea name="notes" rows="2">{{ rating['r.notes'] if rating else '' }}</textarea>
+        </label>
+        <button type="submit" class="btn-primary">Save Rating</button>
+      </form>
+      <div id="rate-status"></div>
+    </div>
+  </div>
+
+  <!-- Festival history -->
+  <div class="card full-width">
+    <h2>Festival History</h2>
+    {% if history %}
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Festival</th>
+          <th>Date</th>
+          <th>Location</th>
+          <th>Rank</th>
+          <th>Type</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in history %}
+        <tr>
+          <td>{{ row['f.name'] }}</td>
+          <td>{{ row['f.start_date'] or '—' }}</td>
+          <td>{{ row['f.location'] or '—' }}</td>
+          <td>
+            {% if row['r.alphabetical'] %}
+              <span class="muted">alphabetical</span>
+            {% elif row['r.rank'] and row['r.rank'] > 0 %}
+              <div class="rank-bar-wrap">
+                <div class="rank-bar" style="width: {{ row['r.rank'] }}%"></div>
+                <span>{{ row['r.rank'] | round(0) | int }}%</span>
+              </div>
+            {% else %}—{% endif %}
+          </td>
+          <td><span class="tag">{{ row['rel_type'] }}</span></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="muted">No festival appearances recorded.</p>
+    {% endif %}
+  </div>
+</div>
+
+<script>
+(function () {
+  var list = [];
+  try { list = JSON.parse(sessionStorage.getItem('bandList') || '[]'); } catch (e) {}
+  var currentId = '{{ band.id }}';
+  var idx = list.indexOf(currentId);
+
+  // Position indicator
+  var posEl = document.getElementById('band-position');
+  if (posEl && list.length > 0) posEl.textContent = (idx + 1) + ' of ' + list.length;
+
+  // Arrow buttons
+  var prevBtn = document.getElementById('nav-prev');
+  var nextBtn = document.getElementById('nav-next');
+  if (idx <= 0) prevBtn.setAttribute('aria-disabled', 'true');
+  if (idx < 0 || idx >= list.length - 1) nextBtn.setAttribute('aria-disabled', 'true');
+
+  function goPrev() { if (idx > 0) location.href = '/bands/' + list[idx - 1] + '/view'; }
+  function goNext() { if (idx >= 0 && idx < list.length - 1) location.href = '/bands/' + list[idx + 1] + '/view'; }
+
+  prevBtn.addEventListener('click', goPrev);
+  nextBtn.addEventListener('click', goNext);
+
+  // Keyboard shortcuts
+  var firstTabDone = false;
+  document.addEventListener('keydown', function (e) {
+    var active = document.activeElement;
+    var inField = active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.tagName === 'SELECT');
+
+    if (inField) {
+      if (e.key === 'Escape') { active.blur(); e.preventDefault(); }
+      return;
+    }
+
+    if (e.key === 'ArrowLeft')  { e.preventDefault(); goPrev(); }
+    else if (e.key === 'ArrowRight') { e.preventDefault(); goNext(); }
+    else if (e.key === 'Escape') { history.back(); }
+    else if (e.key === 'Tab' && !firstTabDone) {
+      e.preventDefault();
+      firstTabDone = true;
+      var scoreEl = document.getElementById('score-input');
+      if (scoreEl) scoreEl.focus();
+    }
+  });
+})();
+</script>
+{% endblock %}

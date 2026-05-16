@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}Build Playlist — Festival Tracker{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1>Build Spotify Playlist</h1>
+</div>
+
+<div class="grid-2">
+  <div class="card">
+    <h2>Filters</h2>
+    <form hx-post="/playlist" hx-target="#playlist-result" hx-swap="innerHTML" hx-indicator="#pl-spinner">
+
+      <label>Playlist Name (optional)
+        <input type="text" name="playlist_name" placeholder="Festival Radar — 2025-06-01">
+      </label>
+
+      <label>Min Rating (1–10, 0 = any)
+        <input type="number" name="min_rating" min="0" max="10" value="0">
+      </label>
+
+      <label>Interest Levels (comma-separated, blank = any)
+        <input type="text" name="interest_levels" placeholder="interested, must-see">
+      </label>
+
+      <label>Bubble Statuses (comma-separated, blank = any)
+        <input type="text" name="bubble_statuses" placeholder="hot, bubbling">
+      </label>
+
+      <label>Festival (optional)
+        <select name="festival_id">
+          <option value="">— All festivals —</option>
+          {% for f in festivals %}
+          <option value="{{ f.id }}">{{ f.name }}{% if f.start_date %} ({{ f.start_date }}){% endif %}</option>
+          {% endfor %}
+        </select>
+      </label>
+
+      <label>Tracks per Band
+        <input type="number" name="tracks_per_band" min="1" max="10" value="5">
+      </label>
+
+      <button type="submit" class="btn-primary">Generate Playlist</button>
+      <span id="pl-spinner" class="htmx-indicator">Building playlist...</span>
+    </form>
+  </div>
+
+  <div class="card">
+    <h2>Result</h2>
+    <div id="playlist-result">
+      <p class="muted">Configure filters and click Generate.</p>
+    </div>
+  </div>
+</div>
+{% endblock %}

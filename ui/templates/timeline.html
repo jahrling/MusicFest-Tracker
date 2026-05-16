@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}Timeline — Festival Tracker{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1>Festival Timeline</h1>
+  <a href="/timeline.csv" class="btn-secondary">Export CSV</a>
+</div>
+
+{% if timeline %}
+<div class="card full-width">
+  <table class="data-table sortable">
+    <thead>
+      <tr>
+        <th>Band</th>
+        <th>Festival</th>
+        <th>Date</th>
+        <th>Location</th>
+        <th>Rank</th>
+        <th>Status</th>
+        <th>Type</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in timeline %}
+      <tr>
+        <td><a href="/bands/{{ row['b.id'] }}/view">{{ row['b.name'] }}</a></td>
+        <td>{{ row['f.name'] }}</td>
+        <td>{{ row['f.start_date'] or '—' }}</td>
+        <td>{{ row['f.location'] or '—' }}</td>
+        <td>
+          {% if row['r.alphabetical'] %}
+            <span class="muted">alpha</span>
+          {% elif row['r.rank'] and row['r.rank'] > 0 %}
+            <div class="rank-bar-wrap">
+              <div class="rank-bar" style="width: {{ row['r.rank'] }}%"></div>
+              <span>{{ row['r.rank'] | round(0) | int }}%</span>
+            </div>
+          {% else %}—{% endif %}
+        </td>
+        <td>{% if row['b.bubble_status'] %}<span class="bubble-badge status-{{ row['b.bubble_status'] }}">{{ row['b.bubble_status'] }}</span>{% endif %}</td>
+        <td><span class="tag">{{ row['rel_type'] }}</span></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="card">
+  <p class="muted">No timeline data yet. Ingest a festival poster to get started.</p>
+</div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,365 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — Festival Tracker{% endblock %}
+
+{% block content %}
+<section class="hero">
+  <h1>Festival Band Tracker</h1>
+  <p>Ingest festival posters, research bands, and build Spotify playlists.</p>
+</section>
+
+<div class="grid-2">
+  <!-- Ingest panel -->
+  <div class="card">
+    <h2>Ingest Poster</h2>
+
+    <h3>From URLs</h3>
+    <form id="form-url"
+          hx-post="/ingest/url"
+          hx-target="#ingest-result"
+          hx-swap="innerHTML"
+          hx-indicator="#ingest-loading"
+          hx-disabled-elt="find button[type=submit]">
+      <textarea name="urls" rows="3"
+        placeholder="https://festival.com/lineup.jpg&#10;https://other.com/poster.png&#10;One URL per line"
+        required class="full-width"></textarea>
+      <button type="submit" class="btn-primary">Extract Lineup(s)</button>
+    </form>
+
+    <h3>Upload Images / PDFs</h3>
+    <form id="form-upload"
+          hx-post="/ingest/upload"
+          hx-target="#ingest-result"
+          hx-swap="innerHTML"
+          hx-encoding="multipart/form-data"
+          hx-indicator="#ingest-loading"
+          hx-disabled-elt="find button[type=submit]">
+      <input type="file" name="files" accept="image/*,.pdf" multiple required class="full-width">
+      <button type="submit" class="btn-primary">Upload & Extract</button>
+    </form>
+
+    <div id="ingest-loading" class="htmx-indicator ingest-loading-box">
+      <div class="loading-bar"></div>
+      <div class="loading-label">
+        <span class="loading-spinner"></span>
+        Processing poster(s)&hellip; each one takes 10&ndash;20 seconds
+      </div>
+    </div>
+
+    <div id="ingest-result"></div>
+  </div>
+
+  <!-- Festivals panel -->
+  <div class="card">
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:0.75rem;">
+      <h2 style="margin:0">Festivals</h2>
+      <button class="btn-secondary" id="dedup-btn" onclick="runDedup()"
+              style="margin:0; padding:0.3rem 0.8rem; font-size:0.8rem;">De-duplicate</button>
+    </div>
+    <span id="dedup-status" class="muted" style="font-size:0.82rem; display:block; margin-bottom:0.5rem;"></span>
+
+    {% if festivals_grouped %}
+    <ul class="festival-list">
+      {% for group in festivals_grouped %}
+      <li>
+        <strong>{{ group.name }}</strong>
+        <div class="festival-year-tags">
+          {% for f in group.entries %}
+          <span class="festival-year-group">
+            <span class="festival-year" onclick="selectFestival('{{ f.id }}')">
+              {{ f.start_date[:4] if f.start_date else '—' }}
+            </span>
+            <button class="spotify-pill"
+                    onclick="createFestivalPlaylistById('{{ f.id }}')"
+                    title="Create Spotify playlist for {{ group.name }}{% if f.start_date %} {{ f.start_date[:4] }}{% endif %}">
+              <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/></svg>
+            </button>
+          </span>
+          {% endfor %}
+        </div>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="muted">No festivals yet &mdash; upload a poster to get started.</p>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Band grid with tabs + sort/filter -->
+<div class="card full-width">
+
+  <!-- Tab bar -->
+  <div class="band-header">
+    <div class="tab-group">
+      <button class="tab-btn active" data-tab="all" onclick="switchTab('all')">
+        All Bands ({{ bands | length }})
+      </button>
+      <button class="tab-btn" data-tab="festival" onclick="switchTab('festival')">
+        Festival
+      </button>
+      <button class="tab-btn" data-tab="liked" onclick="switchTab('liked')">
+        Liked (<span id="liked-count">{{ liked_count }}</span>)
+      </button>
+    </div>
+
+    <!-- Festival tab controls -->
+    <div id="festival-controls" class="tab-controls" style="display:none">
+      <select id="festival-picker" onchange="onFestivalChange()">
+        <option value="">— select festival —</option>
+        {% for f in festivals %}
+        <option value="{{ f.id }}">
+          {{ f.name }}{% if f.start_date %} ({{ f.start_date[:4] }}){% endif %}
+        </option>
+        {% endfor %}
+      </select>
+      <button class="btn-spotify" id="festival-playlist-btn"
+              onclick="createFestivalPlaylist()" disabled>
+        <svg width="16" height="16" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/></svg>
+        Create Playlist
+      </button>
+    </div>
+
+    <!-- Liked Songs tab controls -->
+    <div id="liked-controls" class="tab-controls" style="display:none">
+      <button class="btn-secondary" id="sync-liked-btn" onclick="syncLikedSongs()"
+              style="margin:0">Sync Liked Songs</button>
+      <span id="liked-status" class="muted" style="font-size:0.85rem"></span>
+    </div>
+  </div>
+
+  <!-- Sort + filter bar -->
+  <div class="filter-bar">
+    <div class="filter-group">
+      <span>Sort:</span>
+      <select id="sort-by" onchange="applySortAndFilter()">
+        <option value="rank">Rank</option>
+        <option value="name">Name A–Z</option>
+        <option value="score">Score</option>
+      </select>
+    </div>
+    <input id="filter-text" type="search" placeholder="Name or notes…"
+           class="filter-search" oninput="applySortAndFilter()">
+    <div class="filter-group">
+      <span>Score&nbsp;&#8805;</span>
+      <input id="filter-score" type="number" min="1" max="10" placeholder="—"
+             class="filter-num" oninput="applySortAndFilter()">
+    </div>
+    <div class="filter-group">
+      <select id="filter-interest" onchange="applySortAndFilter()">
+        <option value="">Any interest</option>
+        <option value="must-see">Must-see</option>
+        <option value="interested">Interested</option>
+        <option value="curious">Curious</option>
+        <option value="skip">Skip</option>
+      </select>
+    </div>
+    <label class="filter-liked-wrap">
+      <input type="checkbox" id="filter-liked" onchange="applySortAndFilter()"> Liked
+    </label>
+  </div>
+
+  <div class="band-grid" id="band-grid">
+    {% for b in bands %}
+    <a href="/bands/{{ b.id }}/view"
+       class="band-card {{ b.color_class }}"
+       data-name="{{ b.name | lower | e }}"
+       data-festivals="{{ b.festival_ids | join(',') }}"
+       data-liked="{{ 'true' if b.is_liked else 'false' }}"
+       data-rank="{{ b.global_rank | round(2) }}"
+       data-score="{{ b.score if b.score is not none else '' }}"
+       data-interest="{{ b.interest | e }}"
+       data-notes="{{ b.rating_notes | lower | e }}">
+      <div class="band-name">{{ b.name }}</div>
+      {% if b.bubble_status %}
+        <div class="bubble-badge status-{{ b.bubble_status }}">{{ b.bubble_status }}</div>
+      {% endif %}
+      {% if b.score is not none %}
+        <div class="score-sm">{{ b.score }}/10</div>
+      {% endif %}
+      {% if b.genres %}
+        <div class="genre-tag">{{ b.genres | truncate(40) }}</div>
+      {% endif %}
+    </a>
+    {% endfor %}
+  </div>
+</div>
+
+<script>
+// ── State ─────────────────────────────────────────────────────────────────────
+let currentTab = 'all';
+let currentFestival = '';
+
+// ── Band list: store visible order for keyboard nav on detail page ─────────
+function storeBandList() {
+  var ids = [...document.querySelectorAll('.band-card')]
+    .filter(c => c.style.display !== 'none')
+    .map(c => { var m = c.href.match(/\/bands\/([^/]+)\/view/); return m ? m[1] : null; })
+    .filter(Boolean);
+  sessionStorage.setItem('bandList', JSON.stringify(ids));
+}
+document.querySelectorAll('.band-card').forEach(c => c.addEventListener('click', storeBandList, true));
+
+// Reload when navigating back so scores/colors are current
+window.addEventListener('pageshow', function (e) { if (e.persisted) location.reload(); });
+
+// ── Tabs ───────────────────────────────────────────────────────────────────
+function switchTab(tab) {
+  currentTab = tab;
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.tab === tab);
+  });
+  document.getElementById('festival-controls').style.display = tab === 'festival' ? 'flex' : 'none';
+  document.getElementById('liked-controls').style.display   = tab === 'liked'    ? 'flex' : 'none';
+  applySortAndFilter();
+}
+
+// ── Festival quick-select from the panel ──────────────────────────────────
+function selectFestival(festivalId) {
+  switchTab('festival');
+  var picker = document.getElementById('festival-picker');
+  picker.value = festivalId;
+  currentFestival = festivalId;
+  document.getElementById('festival-playlist-btn').disabled = false;
+  applySortAndFilter();
+  document.getElementById('band-grid').scrollIntoView({ behavior: 'smooth' });
+}
+
+function onFestivalChange() {
+  currentFestival = document.getElementById('festival-picker').value;
+  document.getElementById('festival-playlist-btn').disabled = !currentFestival;
+  applySortAndFilter();
+}
+
+// ── Sort + filter (single function for all controls) ─────────────────────
+function applySortAndFilter() {
+  var q          = (document.getElementById('filter-text').value    || '').toLowerCase();
+  var minScore   = parseInt(document.getElementById('filter-score').value  || '') || 0;
+  var interestV  = document.getElementById('filter-interest').value;
+  var likedOnly  = document.getElementById('filter-liked').checked;
+  var sortBy     = document.getElementById('sort-by').value;
+
+  var grid  = document.getElementById('band-grid');
+  var cards = [...grid.querySelectorAll('.band-card')];
+
+  cards.forEach(function (card) {
+    var name      = card.dataset.name     || '';
+    var notes     = card.dataset.notes    || '';
+    var festivals = (card.dataset.festivals || '').split(',').filter(Boolean);
+    var isLiked   = card.dataset.liked   === 'true';
+    var score     = card.dataset.score   !== '' ? parseFloat(card.dataset.score) : NaN;
+    var interest  = card.dataset.interest || '';
+
+    var show = true;
+    if (currentTab === 'festival') show = show && !!currentFestival && festivals.includes(currentFestival);
+    if (currentTab === 'liked')    show = show && isLiked;
+    if (q)         show = show && (name.includes(q) || notes.includes(q));
+    if (minScore)  show = show && !isNaN(score) && score >= minScore;
+    if (interestV) show = show && interest === interestV;
+    if (likedOnly) show = show && isLiked;
+    card.style.display = show ? '' : 'none';
+  });
+
+  // Re-sort by appending cards in sorted order (appendChild moves existing nodes)
+  cards.sort(function (a, b) {
+    if (sortBy === 'name') return (a.dataset.name || '').localeCompare(b.dataset.name || '');
+    if (sortBy === 'score') {
+      var sa = a.dataset.score !== '' ? parseFloat(a.dataset.score) : -1;
+      var sb = b.dataset.score !== '' ? parseFloat(b.dataset.score) : -1;
+      return sb - sa;
+    }
+    return (parseFloat(b.dataset.rank) || 0) - (parseFloat(a.dataset.rank) || 0);
+  });
+  cards.forEach(function (c) { grid.appendChild(c); });
+}
+
+// ── Toast notification ────────────────────────────────────────────────────
+function showToast(html, type) {
+  var existing = document.getElementById('ft-toast');
+  if (existing) existing.remove();
+  var t = document.createElement('div');
+  t.id = 'ft-toast';
+  t.className = 'toast' + (type ? ' toast-' + type : '');
+  t.innerHTML = html;
+  document.body.appendChild(t);
+  setTimeout(function () {
+    t.style.opacity = '0';
+    setTimeout(function () { if (t.parentNode) t.remove(); }, 300);
+  }, 7000);
+}
+
+// ── Festival playlist (tab button — uses currentFestival) ─────────────────
+async function createFestivalPlaylist() {
+  if (!currentFestival) return;
+  var btn = document.getElementById('festival-playlist-btn');
+  btn.disabled = true;
+  await _doCreatePlaylist(currentFestival, btn);
+  btn.disabled = false;
+}
+
+// ── Festival playlist (panel Spotify icon — direct by ID) ─────────────────
+async function createFestivalPlaylistById(festivalId) {
+  await _doCreatePlaylist(festivalId, null);
+}
+
+async function _doCreatePlaylist(festivalId, btn) {
+  showToast('<span style="color:#1DB954">⏳</span> Creating Spotify playlist…');
+  try {
+    var data = await fetch('/playlist/festival/' + festivalId, { method: 'POST' }).then(r => r.json());
+    if (data.playlist_url) {
+      showToast(
+        '<span style="color:#1DB954">✓</span> <strong>' + (data.playlist_name || 'Playlist') + '</strong>'
+        + ' &mdash; ' + data.band_count + ' bands<br>'
+        + '<a href="' + data.playlist_url + '" target="_blank" rel="noopener" style="color:#1DB954;font-weight:600">'
+        + 'Open in Spotify &rarr;</a>',
+        'spotify'
+      );
+    } else {
+      showToast('Playlist creation failed: ' + (data.detail || 'unknown error'));
+    }
+  } catch (e) {
+    showToast('Error creating playlist.');
+  }
+}
+
+// ── Liked Songs sync ─────────────────────────────────────────────────────
+async function syncLikedSongs() {
+  var btn      = document.getElementById('sync-liked-btn');
+  var statusEl = document.getElementById('liked-status');
+  btn.disabled = true;
+  statusEl.textContent = 'Starting sync…';
+  try { await fetch('/spotify/liked/sync', { method: 'POST' }); } catch (e) {}
+  var poll = setInterval(async function () {
+    try {
+      var data = await fetch('/spotify/liked/status').then(r => r.json());
+      var ts   = data.last_sync ? ' · ' + new Date(data.last_sync).toLocaleString() : '';
+      statusEl.textContent = data.is_syncing
+        ? 'Syncing… (' + data.count + ' so far)'
+        : data.count + ' artists synced' + ts;
+      if (!data.is_syncing) {
+        clearInterval(poll);
+        btn.disabled = false;
+        document.getElementById('liked-count').textContent = data.count;
+        setTimeout(() => location.reload(), 1500);
+      }
+    } catch (e) {}
+  }, 3000);
+}
+
+// ── De-duplicate ─────────────────────────────────────────────────────────
+async function runDedup() {
+  var btn    = document.getElementById('dedup-btn');
+  var status = document.getElementById('dedup-status');
+  btn.disabled = true;
+  status.textContent = 'Running…';
+  try {
+    var data = await fetch('/dedup', { method: 'POST' }).then(r => r.json());
+    status.textContent = 'Done — ' + data.festivals_merged + ' festivals merged, '
+                       + data.edges_removed + ' duplicate edges removed.';
+    if (data.festivals_merged > 0 || data.edges_removed > 0) setTimeout(() => location.reload(), 2000);
+  } catch (e) {
+    status.textContent = 'Error running de-duplicate.';
+  }
+  btn.disabled = false;
+}
+</script>
+{% endblock %}
