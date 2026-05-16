@@ -15,7 +15,7 @@ CLAUDE_MODEL = "claude-sonnet-4-5"
 SPOTIFY_CLIENT_ID = os.getenv("SPOTIFY_CLIENT_ID", "")
 SPOTIFY_CLIENT_SECRET = os.getenv("SPOTIFY_CLIENT_SECRET", "")
 SPOTIFY_REDIRECT_URI = os.getenv("SPOTIFY_REDIRECT_URI", "http://localhost:8080/callback")
-SPOTIFY_SCOPE = "playlist-modify-public playlist-modify-private user-library-read"
+SPOTIFY_SCOPE = "playlist-modify-public playlist-modify-private playlist-read-private user-library-read"
 
 SYNC_META_PATH = DATA_DIR / "sync_meta.json"
 
