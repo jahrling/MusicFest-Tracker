@@ -69,6 +69,15 @@ def download_poster(url: str) -> Path:
     return dest
 
 
+def _is_avif(path: Path) -> bool:
+    """Detect AVIF by magic bytes (ftyp box with avif/avis brand)."""
+    try:
+        header = path.read_bytes()[:16]
+        return header[4:8] == b"ftyp" and header[8:12] in (b"avif", b"avis")
+    except Exception:
+        return False
+
+
 def load_image_as_base64(path: Path) -> tuple[str, str]:
     """Return (base64_data, media_type) for a local image file."""
     suffix = path.suffix.lower()
@@ -78,8 +87,16 @@ def load_image_as_base64(path: Path) -> tuple[str, str]:
         data = path.read_bytes()
         return base64.standard_b64encode(data).decode(), "application/pdf"
 
-    # Open and optionally resize with Pillow
-    img = Image.open(path)
+    if _is_avif(path):
+        raise ValueError(
+            f"{path.name} is an AVIF image, which isn't supported. "
+            "Open it in any photo editor, export as JPEG or PNG, then re-upload."
+        )
+
+    try:
+        img = Image.open(path)
+    except Exception as exc:
+        raise ValueError(f"Cannot open image {path.name}: {exc}") from exc
 
     # Downscale if needed before any conversion (saves memory)
     w, h = img.size
