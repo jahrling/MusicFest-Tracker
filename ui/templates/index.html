@@ -368,7 +368,19 @@ async function syncLikedSongs() {
   var statusEl = document.getElementById('liked-status');
   btn.disabled = true;
   statusEl.textContent = 'Starting sync…';
-  try { await fetch('/spotify/liked/sync', { method: 'POST' }); } catch (e) {}
+  try {
+    var resp = await fetch('/spotify/liked/sync', { method: 'POST' });
+    if (resp.status === 401) {
+      // Not authenticated yet — send user through Spotify OAuth flow
+      statusEl.innerHTML = '<a href="/spotify/auth" style="color:var(--accent)">Connect Spotify to sync →</a>';
+      btn.disabled = false;
+      return;
+    }
+  } catch (e) {
+    statusEl.textContent = 'Error starting sync.';
+    btn.disabled = false;
+    return;
+  }
   var poll = setInterval(async function () {
     try {
       var data = await fetch('/spotify/liked/status').then(r => r.json());
@@ -385,6 +397,17 @@ async function syncLikedSongs() {
     } catch (e) {}
   }, 3000);
 }
+
+// Check Spotify connection on page load and show Connect link if needed
+(async function checkSpotifyAuth() {
+  try {
+    var data = await fetch('/spotify/status').then(r => r.json());
+    if (!data.connected) {
+      var statusEl = document.getElementById('liked-status');
+      if (statusEl) statusEl.innerHTML = '<a href="/spotify/auth" style="color:var(--accent)">Connect Spotify first →</a>';
+    }
+  } catch (e) {}
+})();
 
 // ── MusicFestivalWizard discover ─────────────────────────────────────────
 async function runDiscover() {

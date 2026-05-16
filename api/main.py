@@ -27,7 +27,7 @@ from pathlib import Path
 from typing import Annotated
 
 from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, UploadFile
-from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.requests import Request
@@ -397,10 +397,68 @@ async def create_festival_playlist(festival_id: str):
     return {"playlist_url": url, "band_count": len(band_ids), "playlist_name": playlist_name}
 
 
+# ── Spotify OAuth ─────────────────────────────────────────────────────────────
+
+def _spotify_oauth_manager():
+    from spotipy.oauth2 import SpotifyOAuth
+    from config import SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET, SPOTIFY_REDIRECT_URI, SPOTIFY_SCOPE
+    return SpotifyOAuth(
+        client_id=SPOTIFY_CLIENT_ID,
+        client_secret=SPOTIFY_CLIENT_SECRET,
+        redirect_uri=SPOTIFY_REDIRECT_URI,
+        scope=SPOTIFY_SCOPE,
+        cache_path=".spotify_cache",
+        open_browser=False,
+    )
+
+
+@app.get("/spotify/auth")
+async def spotify_auth():
+    """Redirect the user to Spotify's login page to complete OAuth."""
+    auth = _spotify_oauth_manager()
+    auth_url = auth.get_authorize_url()
+    return RedirectResponse(auth_url)
+
+
+@app.get("/callback")
+async def spotify_callback(code: str = "", error: str = ""):
+    """Spotify OAuth callback — exchanges the code for a token and caches it."""
+    if error:
+        return HTMLResponse(
+            f"<p>Spotify auth failed: {error}. <a href='/'>Back</a></p>", status_code=400
+        )
+    if not code:
+        return HTMLResponse("<p>No code received from Spotify.</p>", status_code=400)
+    auth = _spotify_oauth_manager()
+    auth.get_access_token(code, as_dict=False)
+    return RedirectResponse("/?spotify=connected")
+
+
+@app.get("/spotify/status")
+async def spotify_status():
+    """Return whether a valid Spotify token is cached."""
+    try:
+        auth = _spotify_oauth_manager()
+        token = auth.get_cached_token()
+        if token and not auth.is_token_expired(token):
+            return {"connected": True}
+    except Exception:
+        pass
+    return {"connected": False}
+
+
 # ── Liked Songs ───────────────────────────────────────────────────────────────
 
 @app.post("/spotify/liked/sync")
 async def liked_sync(background_tasks: BackgroundTasks):
+    # Check auth before kicking off background task
+    try:
+        auth = _spotify_oauth_manager()
+        token = auth.get_cached_token()
+        if not token or auth.is_token_expired(token):
+            return JSONResponse({"status": "auth_required"}, status_code=401)
+    except Exception:
+        return JSONResponse({"status": "auth_required"}, status_code=401)
     background_tasks.add_task(sync_liked_songs, True)
     return {"status": "started"}
 
