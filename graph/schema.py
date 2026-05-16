@@ -93,4 +93,5 @@ SCHEMA_DDL = [
     # ── Migrations (fail silently on existing DBs) ───────────────────────
     "ALTER TABLE PLAYED_AT ADD day STRING",
     "ALTER TABLE SCHEDULED_FOR ADD day STRING",
+    "ALTER TABLE Festival ADD attended BOOL",
 ]

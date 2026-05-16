@@ -477,6 +477,81 @@ kbd {
   font-size: 0.875rem;
 }
 
+/* ── Festival group header (rename + city) ───────────────────────────────── */
+.festival-group-header {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 0.3rem;
+}
+
+.festival-group-name {
+  font-size: 0.95rem;
+}
+
+.rename-btn {
+  background: none;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 0.75rem;
+  padding: 0 0.2rem;
+  opacity: 0;
+  transition: opacity 0.15s, color 0.15s;
+  line-height: 1;
+}
+
+.festival-group-header:hover .rename-btn,
+.rename-btn:focus {
+  opacity: 1;
+  color: var(--accent-hover);
+}
+
+.rename-input {
+  background: var(--surface);
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  color: var(--text);
+  font-size: 0.95rem;
+  font-weight: 600;
+  padding: 0.1rem 0.4rem;
+  outline: none;
+  width: 100%;
+  max-width: 280px;
+}
+
+/* ── Attended star pill ──────────────────────────────────────────────────── */
+.attended-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: none;
+  cursor: pointer;
+  font-size: 0.75rem;
+  line-height: 1;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+  padding: 0;
+}
+
+.attended-pill.attended-no {
+  color: var(--muted);
+}
+
+.attended-pill.attended-no:hover {
+  border-color: #f59e0b;
+  color: #f59e0b;
+}
+
+.attended-pill.attended-yes {
+  background: rgba(245,158,11,0.15);
+  border-color: #f59e0b;
+  color: #f59e0b;
+}
+
 /* ── Discover tab ─────────────────────────────────────────────────────────── */
 #discover-panel {
   padding: 0.25rem 0 1rem;

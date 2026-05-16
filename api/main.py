@@ -111,16 +111,31 @@ async def index(request: Request):
     # Default order: most recent festival rank descending
     bands.sort(key=lambda b: b.get("global_rank", 0.0), reverse=True)
 
-    # Group festivals by name for the panel display
-    festival_groups: dict[str, list] = defaultdict(list)
+    def _extract_city(location: str) -> str:
+        """'Grant Park, Chicago, IL' → 'Chicago'  |  'Chicago, IL' → 'Chicago'"""
+        parts = [p.strip() for p in location.split(",") if p.strip()]
+        if len(parts) >= 3:
+            return parts[-2]   # skip venue prefix and state suffix
+        if len(parts) == 2:
+            return parts[0]    # "City, ST"
+        return parts[0] if parts else ""
+
+    # Group festivals by (name, city) so same festival in different cities stays separate
+    festival_groups: dict[tuple, list] = defaultdict(list)
     for f in festivals:
-        festival_groups[f.get("name", "")].append(f)
+        city = _extract_city(f.get("location", ""))
+        festival_groups[(f.get("name", ""), city)].append(f)
+
     festivals_grouped = [
         {
             "name": name,
+            "city": city,
+            "display_name": f"{name} ({city})" if city else name,
             "entries": sorted(entries, key=lambda f: f.get("start_date", ""), reverse=True),
         }
-        for name, entries in sorted(festival_groups.items(), key=lambda x: x[0].lower())
+        for (name, city), entries in sorted(
+            festival_groups.items(), key=lambda x: x[0][0].lower()
+        )
     ]
 
     liked_count = queries.count_liked_artists()
@@ -445,6 +460,25 @@ async def spotify_status():
     except Exception:
         pass
     return {"connected": False}
+
+
+# ── Festival attendance & rename ─────────────────────────────────────────────
+
+@app.post("/festivals/{festival_id}/attended")
+async def set_festival_attended(festival_id: str, attended: str = Form(...)):
+    if not queries.get_festival(festival_id):
+        raise HTTPException(404, "Festival not found")
+    queries.set_festival_attended(festival_id, attended.lower() == "true")
+    return {"status": "ok"}
+
+
+@app.post("/festivals/rename")
+async def rename_festival(old_name: str = Form(...), new_name: str = Form(...)):
+    new_name = new_name.strip()
+    if not new_name:
+        raise HTTPException(400, "New name cannot be empty")
+    updated = queries.rename_festival_group(old_name, new_name)
+    return {"status": "ok", "updated": updated}
 
 
 # ── Liked Songs ───────────────────────────────────────────────────────────────

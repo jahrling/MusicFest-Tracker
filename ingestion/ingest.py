@@ -5,11 +5,23 @@ High-level ingestion pipeline:
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
 from ingestion.poster_parser import ParsedPoster, parse_poster
 from graph import queries
+
+_TRAILING_YEAR_RE = re.compile(r"[\s,\-]+\d{4}\s*$")
+
+
+def _normalize_festival_name(name: str, start_date: str) -> str:
+    """Strip a trailing year from the festival name when it matches start_date."""
+    year = (start_date or "")[:4]
+    if len(year) == 4 and name.endswith(year):
+        cleaned = _TRAILING_YEAR_RE.sub("", name).strip()
+        return cleaned if cleaned else name
+    return name
 
 
 @dataclass
@@ -45,8 +57,11 @@ def ingest_parsed(parsed: ParsedPoster) -> IngestionResult:
     existing band→festival edges and rebuilds them from the new poster, while
     leaving Band nodes and all RATED data intact.
     """
+    raw_name = parsed.festival_name or "Unknown Festival"
+    festival_name = _normalize_festival_name(raw_name, parsed.start_date or "")
+
     festival_id = queries.upsert_festival(
-        name=parsed.festival_name or "Unknown Festival",
+        name=festival_name,
         location=parsed.location or "",
         start_date=parsed.start_date or "",
         end_date=parsed.end_date or "",
@@ -90,7 +105,7 @@ def ingest_parsed(parsed: ParsedPoster) -> IngestionResult:
 
     return IngestionResult(
         festival_id=festival_id,
-        festival_name=parsed.festival_name,
+        festival_name=festival_name,
         bands_added=bands_added,
         bands_merged=bands_merged,
         alphabetical=parsed.alphabetical,
