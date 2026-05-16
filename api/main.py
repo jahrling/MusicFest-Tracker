@@ -22,9 +22,13 @@ import io
 import json
 import logging
 import tempfile
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Annotated
+
+import threading
+from dataclasses import dataclass, field as _dc_field
 
 from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
@@ -33,6 +37,85 @@ from fastapi.templating import Jinja2Templates
 from starlette.requests import Request
 
 from config import BASE_DIR, POSTERS_DIR, RESEARCH_RANK_THRESHOLD, ANTHROPIC_API_KEY, VISION_BACKEND
+
+# ── Background ingest job store ───────────────────────────────────────────────
+
+@dataclass
+class _IngestJob:
+    id: str
+    status: str           # queued | processing | done
+    displays: list[str]   # user-visible names (filename / URL)
+    paths: list[str]      # actual file paths or URLs to process
+    results: list[dict] = _dc_field(default_factory=list)
+    created_at: str = ""
+    updated_at: str = ""
+
+_jobs: dict[str, _IngestJob] = {}
+_jobs_lock = threading.Lock()
+_JOB_TTL = 600  # seconds to retain completed jobs in memory
+
+
+def _new_job(displays: list[str], paths: list[str]) -> _IngestJob:
+    job = _IngestJob(
+        id=str(uuid.uuid4())[:8],
+        status="queued",
+        displays=displays,
+        paths=paths,
+        created_at=datetime.now(timezone.utc).isoformat(),
+        updated_at=datetime.now(timezone.utc).isoformat(),
+    )
+    with _jobs_lock:
+        _jobs[job.id] = job
+        cutoff = datetime.now(timezone.utc).timestamp() - _JOB_TTL
+        stale = [jid for jid, j in _jobs.items()
+                 if datetime.fromisoformat(j.created_at).timestamp() < cutoff]
+        for jid in stale:
+            del _jobs[jid]
+    return job
+
+
+def _run_ingest_job(job_id: str) -> None:
+    """Background worker — runs in a thread pool via BackgroundTasks."""
+    with _jobs_lock:
+        job = _jobs.get(job_id)
+        if not job:
+            return
+        job.status = "processing"
+        job.updated_at = datetime.now(timezone.utc).isoformat()
+
+    results = []
+    for display, path in zip(job.displays, job.paths):
+        try:
+            is_url = path.startswith("http://") or path.startswith("https://")
+            r = ingest_poster(path if is_url else Path(path),
+                              source_url=path if is_url else "")
+            results.append({
+                "source": display,
+                "festival_name": r.festival_name,
+                "band_count": len(r.band_ids),
+                "bands_added": r.bands_added,
+                "bands_merged": r.bands_merged,
+                "alphabetical": r.alphabetical,
+                "reimport": r.reimport,
+            })
+        except Exception as exc:
+            log.exception("Ingest job %s failed for %s", job_id, display)
+            results.append({"source": display, "error": str(exc)})
+        finally:
+            # Delete temp file after processing an upload
+            if not (path.startswith("http://") or path.startswith("https://")):
+                try:
+                    Path(path).unlink(missing_ok=True)
+                except Exception:
+                    pass
+
+    with _jobs_lock:
+        job = _jobs.get(job_id)
+        if job:
+            job.status = "done"
+            job.results = results
+            job.updated_at = datetime.now(timezone.utc).isoformat()
+    log.info("Ingest job %s done — %d source(s)", job_id, len(results))
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("festival_tracker")
@@ -199,55 +282,52 @@ async def playlist_page(request: Request):
 # ── API routes ────────────────────────────────────────────────────────────────
 
 @app.post("/ingest/url")
-async def ingest_from_url(urls: str = Form(...)):
+async def ingest_from_url(background_tasks: BackgroundTasks, urls: str = Form(...)):
     url_list = [u.strip() for u in urls.splitlines() if u.strip()]
     if not url_list:
         raise HTTPException(400, "No URLs provided")
-    results = []
-    for url in url_list:
-        try:
-            r = ingest_poster(url, source_url=url)
-            results.append({
-                "source": url,
-                "festival_name": r.festival_name,
-                "band_count": len(r.band_ids),
-                "bands_added": r.bands_added,
-                "bands_merged": r.bands_merged,
-                "alphabetical": r.alphabetical,
-                "reimport": r.reimport,
-            })
-        except Exception as exc:
-            log.exception("Ingestion failed for URL %s", url)
-            results.append({"source": url, "error": str(exc)})
-    return {"results": results}
+    job = _new_job(displays=url_list, paths=url_list)
+    background_tasks.add_task(_run_ingest_job, job.id)
+    return {"job_id": job.id, "status": "queued", "source_count": len(url_list), "displays": url_list}
 
 
 @app.post("/ingest/upload")
-async def ingest_from_upload(files: list[UploadFile] = File(...)):
-    results = []
+async def ingest_from_upload(background_tasks: BackgroundTasks, files: list[UploadFile] = File(...)):
+    displays, paths = [], []
     for file in files:
         suffix = Path(file.filename or "poster.jpg").suffix or ".jpg"
-        with tempfile.NamedTemporaryFile(
-            delete=False, suffix=suffix, dir=POSTERS_DIR
-        ) as tmp:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix, dir=POSTERS_DIR) as tmp:
             tmp.write(await file.read())
-            tmp_path = Path(tmp.name)
-        try:
-            r = ingest_poster(tmp_path)
-            results.append({
-                "source": file.filename,
-                "festival_name": r.festival_name,
-                "band_count": len(r.band_ids),
-                "bands_added": r.bands_added,
-                "bands_merged": r.bands_merged,
-                "alphabetical": r.alphabetical,
-                "reimport": r.reimport,
-            })
-        except Exception as exc:
-            log.exception("Ingestion failed for %s", file.filename)
-            tmp_path.unlink(missing_ok=True)
-            results.append({"source": file.filename, "error": str(exc)})
-    return {"results": results}
+            paths.append(tmp.name)
+        displays.append(file.filename or Path(paths[-1]).name)
+    job = _new_job(displays=displays, paths=paths)
+    background_tasks.add_task(_run_ingest_job, job.id)
+    return {"job_id": job.id, "status": "queued", "source_count": len(displays), "displays": displays}
+
+
+@app.get("/ingest/jobs/{job_id}")
+async def get_ingest_job(job_id: str):
+    with _jobs_lock:
+        job = _jobs.get(job_id)
+    if not job:
+        raise HTTPException(404, "Job not found or expired")
+    return {
+        "job_id": job.id,
+        "status": job.status,
+        "displays": job.displays,
+        "results": job.results,
+        "updated_at": job.updated_at,
+    }
+
+
+@app.get("/ingest/jobs")
+async def list_ingest_jobs():
+    with _jobs_lock:
+        jobs = list(_jobs.values())
+    return [
+        {"job_id": j.id, "status": j.status, "source_count": len(j.displays), "updated_at": j.updated_at}
+        for j in jobs
+    ]
 
 
 @app.get("/bands")
