@@ -183,6 +183,26 @@ def list_festivals() -> list[dict]:
     return [{k.replace("f.", ""): v for k, v in r.items()} for r in rows]
 
 
+def delete_festival(festival_id: str) -> bool:
+    """
+    Delete a Festival node and all its incoming edges (PLAYED_AT, SCHEDULED_FOR).
+    Band nodes and their ratings/notes are left intact.
+    Returns True if the festival existed and was deleted.
+    """
+    conn = get_connection()
+    if not _row_to_dict(conn.execute(
+        "MATCH (f:Festival {id: $id}) RETURN f.id", {"id": festival_id}
+    )):
+        return False
+    for rel in ("PLAYED_AT", "SCHEDULED_FOR"):
+        conn.execute(
+            f"MATCH (b:Band)-[r:{rel}]->(f:Festival {{id: $id}}) DELETE r",
+            {"id": festival_id},
+        )
+    conn.execute("MATCH (f:Festival {id: $id}) DELETE f", {"id": festival_id})
+    return True
+
+
 def set_festival_attended(festival_id: str, attended: bool) -> None:
     conn = get_connection()
     conn.execute(

@@ -91,6 +91,9 @@
                     title="{{ 'Attended — click to unmark' if f.attended else 'Mark as attended' }}">
               {{ '★' if f.attended else '☆' }}
             </button>
+            <button class="delete-year-btn"
+                    onclick="deleteFestival('{{ f.id }}', '{{ group.display_name | e }}', '{{ f.start_date[:4] if f.start_date else '' }}')"
+                    title="Delete this festival year">&#215;</button>
           </span>
           {% endfor %}
         </div>
@@ -491,6 +494,23 @@ function startRename(oldName, labelId) {
   label.replaceWith(input);
   input.focus();
   input.select();
+}
+
+// ── Festival delete ───────────────────────────────────────────────────────
+async function deleteFestival(festivalId, name, year) {
+  var label = name + (year ? ' ' + year : '');
+  if (!confirm('Delete ' + label + '?\n\nThis removes the festival and all its band connections. Band ratings and notes are kept.')) return;
+  try {
+    var resp = await fetch('/festivals/' + festivalId, { method: 'DELETE' });
+    if (resp.ok) {
+      showToast('Deleted ' + label + '.');
+      setTimeout(() => location.reload(), 1000);
+    } else {
+      showToast('Delete failed — festival not found.');
+    }
+  } catch (e) {
+    showToast('Delete failed.');
+  }
 }
 
 // ── Festival location edit ────────────────────────────────────────────────

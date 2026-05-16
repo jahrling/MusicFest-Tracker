@@ -542,6 +542,16 @@ async def spotify_status():
     return {"connected": False}
 
 
+# ── Festival CRUD ────────────────────────────────────────────────────────────
+
+@app.delete("/festivals/{festival_id}")
+async def delete_festival(festival_id: str):
+    found = queries.delete_festival(festival_id)
+    if not found:
+        raise HTTPException(404, "Festival not found")
+    return {"status": "ok"}
+
+
 # ── Festival attendance & rename ─────────────────────────────────────────────
 
 @app.post("/festivals/{festival_id}/attended")

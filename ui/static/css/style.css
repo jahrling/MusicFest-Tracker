@@ -577,6 +577,31 @@ kbd {
   font-size: 0.65rem;
 }
 
+/* ── Delete year button ─────────────────────────────────────────────────── */
+.delete-year-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 1px solid transparent;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 0.85rem;
+  line-height: 1;
+  padding: 0;
+  opacity: 0;
+  transition: opacity 0.15s, background 0.15s, color 0.15s, border-color 0.15s;
+}
+.festival-year-group:hover .delete-year-btn { opacity: 1; }
+.delete-year-btn:hover {
+  background: rgba(239,68,68,0.15);
+  border-color: var(--hot);
+  color: var(--hot);
+}
+
 /* ── Attended star pill ──────────────────────────────────────────────────── */
 .attended-pill {
   display: inline-flex;
