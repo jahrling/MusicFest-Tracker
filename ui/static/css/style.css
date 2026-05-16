@@ -476,3 +476,129 @@ kbd {
   color: #f87171;
   font-size: 0.875rem;
 }
+
+/* ── Discover tab ─────────────────────────────────────────────────────────── */
+#discover-panel {
+  padding: 0.25rem 0 1rem;
+}
+
+.discover-controls {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.25rem;
+}
+
+.discover-pool-checks {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.discover-check {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.discover-setup-card {
+  margin-top: 1rem;
+  padding: 1.25rem 1.5rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.discover-code {
+  display: inline-block;
+  padding: 0.4rem 0.75rem;
+  background: #0d1117;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-family: monospace;
+  font-size: 0.875rem;
+  color: #a5f3fc;
+}
+
+.discover-pool-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.mfw-band-chip {
+  display: inline-block;
+  padding: 0.2rem 0.55rem;
+  background: rgba(99,102,241,0.12);
+  border: 1px solid rgba(99,102,241,0.25);
+  border-radius: 12px;
+  font-size: 0.78rem;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.mfw-band-chip.mfw-liked {
+  background: rgba(29,185,84,0.1);
+  border-color: rgba(29,185,84,0.3);
+  color: #4ade80;
+}
+
+.discover-festival-card {
+  margin-top: 1rem;
+  padding: 1rem 1.25rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  transition: border-color 0.15s;
+}
+
+.discover-festival-card:hover {
+  border-color: var(--accent);
+}
+
+.discover-festival-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.6rem;
+}
+
+.discover-festival-name {
+  font-size: 1rem;
+}
+
+.discover-score-badge {
+  flex-shrink: 0;
+  min-width: 3rem;
+  text-align: center;
+  padding: 0.2rem 0.6rem;
+  background: var(--accent);
+  color: #fff;
+  border-radius: 12px;
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.discover-matching-bands {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-bottom: 0.5rem;
+}
+
+.discover-meta {
+  font-size: 0.8rem;
+  margin-bottom: 0.75rem;
+}
+
+.discover-actions {
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}

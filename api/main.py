@@ -124,6 +124,10 @@ async def index(request: Request):
     ]
 
     liked_count = queries.count_liked_artists()
+    rated_high_count = sum(
+        1 for r in rating_data.values()
+        if r.get("r.score") is not None and int(r["r.score"]) >= 7
+    )
     return templates.TemplateResponse(
         request,
         "index.html",
@@ -132,6 +136,7 @@ async def index(request: Request):
             "festivals_grouped": festivals_grouped,
             "bands": bands,
             "liked_count": liked_count,
+            "rated_high_count": rated_high_count,
         },
     )
 
@@ -403,6 +408,77 @@ async def liked_sync(background_tasks: BackgroundTasks):
 @app.get("/spotify/liked/status")
 async def liked_status():
     return get_sync_status()
+
+
+# ── Discover (MusicFestivalWizard search) ─────────────────────────────────────
+
+@app.post("/discover/search")
+async def discover_search(use_rated: str = Form("true"), use_liked: str = Form("true")):
+    """
+    Build the artist search pool from rated (≥7) and/or liked bands, then hand off
+    to the MFW scraper.  Scraping requires Playwright; returns a stub response until
+    it is installed.
+    """
+    from ingestion.mfw_scraper import search_mfw, MfwNotAvailable
+
+    include_rated = use_rated.lower() == "true"
+    include_liked = use_liked.lower() == "true"
+
+    search_pool: list[dict] = []
+    seen: set[str] = set()
+
+    if include_rated:
+        rating_data: dict[str, dict] = {}
+        for r in queries.get_all_ratings():
+            bid = r.get("b.id", "")
+            if bid and bid not in rating_data:
+                rating_data[bid] = r
+        for band in queries.list_bands():
+            bid = band["id"]
+            rating = rating_data.get(bid)
+            if rating and rating.get("r.score") is not None:
+                score = int(rating["r.score"])
+                if score >= 7:
+                    name = band.get("name", "")
+                    search_pool.append({"name": name, "score": score, "source": "rated"})
+                    seen.add(name.lower())
+
+    if include_liked:
+        for name in queries.get_liked_artist_names():
+            display = name.title()
+            if name not in seen:
+                search_pool.append({"name": display, "score": None, "source": "liked"})
+
+    try:
+        results = await search_mfw(search_pool)
+        return {"status": "ok", "pool_size": len(search_pool), "results": results}
+    except MfwNotAvailable as exc:
+        return {
+            "status": "not_implemented",
+            "message": str(exc),
+            "pool_size": len(search_pool),
+            "search_pool": search_pool,
+        }
+    except Exception as exc:
+        log.exception("MFW discover search failed")
+        raise HTTPException(500, str(exc))
+
+
+@app.post("/discover/ingest")
+async def discover_ingest_poster(poster_url: str = Form(...), source_url: str = Form("")):
+    """Ingest a poster image discovered from MusicFestivalWizard."""
+    try:
+        r = ingest_poster(poster_url, source_url=source_url or poster_url)
+        return {
+            "festival_name": r.festival_name,
+            "band_count": len(r.band_ids),
+            "bands_added": r.bands_added,
+            "bands_merged": r.bands_merged,
+            "reimport": r.reimport,
+        }
+    except Exception as exc:
+        log.exception("MFW poster ingest failed for %s", poster_url)
+        raise HTTPException(500, str(exc))
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────

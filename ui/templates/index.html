@@ -100,6 +100,9 @@
       <button class="tab-btn" data-tab="liked" onclick="switchTab('liked')">
         Liked (<span id="liked-count">{{ liked_count }}</span>)
       </button>
+      <button class="tab-btn" data-tab="discover" onclick="switchTab('discover')">
+        Discover
+      </button>
     </div>
 
     <!-- Festival tab controls -->
@@ -158,6 +161,40 @@
     </label>
   </div>
 
+  <!-- Discover panel (MusicFestivalWizard search) -->
+  <div id="discover-panel" style="display:none">
+    <p class="muted" style="margin-bottom:1.25rem">
+      Search <strong>MusicFestivalWizard</strong> for festivals where your top-rated or liked
+      artists are playing — past and upcoming. Discovered festivals can be ingested directly.
+    </p>
+
+    <div class="discover-controls">
+      <div class="discover-pool-checks">
+        <label class="discover-check">
+          <input type="checkbox" id="discover-rated" checked>
+          Rated&nbsp;7+&nbsp;<span class="muted">({{ rated_high_count }})</span>
+        </label>
+        <label class="discover-check">
+          <input type="checkbox" id="discover-liked" checked>
+          Liked&nbsp;Songs&nbsp;<span class="muted">({{ liked_count }})</span>
+        </label>
+      </div>
+      <button id="discover-btn" class="btn-primary" onclick="runDiscover()">
+        Search MusicFestivalWizard
+      </button>
+    </div>
+
+    <div id="discover-loading" class="ingest-loading-box" style="display:none">
+      <div class="loading-bar"></div>
+      <div class="loading-label">
+        <span class="loading-spinner"></span>
+        Searching&hellip; visiting each artist page &mdash; this may take a minute
+      </div>
+    </div>
+
+    <div id="discover-results"></div>
+  </div>
+
   <div class="band-grid" id="band-grid">
     {% for b in bands %}
     <a href="/bands/{{ b.id }}/view"
@@ -208,9 +245,13 @@ function switchTab(tab) {
   document.querySelectorAll('.tab-btn').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.tab === tab);
   });
+  var isDiscover = tab === 'discover';
   document.getElementById('festival-controls').style.display = tab === 'festival' ? 'flex' : 'none';
   document.getElementById('liked-controls').style.display   = tab === 'liked'    ? 'flex' : 'none';
-  applySortAndFilter();
+  document.getElementById('discover-panel').style.display   = isDiscover ? ''     : 'none';
+  document.querySelector('.filter-bar').style.display       = isDiscover ? 'none' : '';
+  document.getElementById('band-grid').style.display        = isDiscover ? 'none' : '';
+  if (!isDiscover) applySortAndFilter();
 }
 
 // ── Festival quick-select from the panel ──────────────────────────────────
@@ -343,6 +384,91 @@ async function syncLikedSongs() {
       }
     } catch (e) {}
   }, 3000);
+}
+
+// ── MusicFestivalWizard discover ─────────────────────────────────────────
+async function runDiscover() {
+  var useRated = document.getElementById('discover-rated').checked;
+  var useLiked = document.getElementById('discover-liked').checked;
+  if (!useRated && !useLiked) { alert('Select at least one search pool.'); return; }
+
+  var btn     = document.getElementById('discover-btn');
+  var loading = document.getElementById('discover-loading');
+  var results = document.getElementById('discover-results');
+  btn.disabled = true;
+  loading.style.display = '';
+  results.innerHTML = '';
+
+  try {
+    var body = new URLSearchParams({ use_rated: useRated, use_liked: useLiked });
+    var data = await fetch('/discover/search', { method: 'POST', body }).then(r => r.json());
+    renderDiscoverResults(data, results);
+  } catch (e) {
+    results.innerHTML = '<div class="ingest-error">Error: ' + e.message + '</div>';
+  } finally {
+    btn.disabled = false;
+    loading.style.display = 'none';
+  }
+}
+
+function renderDiscoverResults(data, container) {
+  if (data.status === 'not_implemented') {
+    var chips = (data.search_pool || []).slice(0, 40).map(function (b) {
+      return '<span class="mfw-band-chip' + (b.source === 'liked' ? ' mfw-liked' : '') + '">'
+           + b.name + (b.score ? ' &middot; ' + b.score : '') + '</span>';
+    }).join('');
+    container.innerHTML = `
+      <div class="discover-setup-card">
+        <h3 style="margin-bottom:.5rem">Playwright required for live search</h3>
+        <p class="muted" style="margin-bottom:.75rem">Install it once to enable MusicFestivalWizard scraping:</p>
+        <code class="discover-code">pip install playwright &amp;&amp; playwright install chromium</code>
+        <p style="margin-top:1rem">Your search pool &mdash; <strong>${data.pool_size}</strong> artists ready to go:</p>
+        <div class="discover-pool-chips" style="margin-top:.5rem">${chips || '<span class="muted">No rated or liked bands yet.</span>'}</div>
+      </div>`;
+    return;
+  }
+  if (!data.results || data.results.length === 0) {
+    container.innerHTML = '<p class="muted" style="margin-top:1rem">No matching festivals found.</p>';
+    return;
+  }
+  container.innerHTML = data.results.map(function (r) {
+    var bands = (r.matching_bands || []).map(function (b) {
+      return '<span class="mfw-band-chip' + (b.liked ? ' mfw-liked' : '') + '">'
+           + b.name + (b.score ? ' &middot; ' + b.score : ' &starf;') + '</span>';
+    }).join('');
+    var ingestBtn = r.poster_url
+      ? '<button class="btn-secondary" onclick="ingestMfwPoster(\'' + r.poster_url + '\',\'' + r.festival_url + '\')">Ingest&nbsp;Poster</button>'
+      : '';
+    return `
+      <div class="discover-festival-card">
+        <div class="discover-festival-header">
+          <div>
+            <strong class="discover-festival-name">${r.festival_name}</strong>
+            ${r.dates ? '<span class="muted" style="margin-left:.4rem;font-size:.85rem">' + r.dates + '</span>' : ''}
+          </div>
+          <div class="discover-score-badge" title="Match score">${r.pct}%</div>
+        </div>
+        <div class="discover-matching-bands">${bands}</div>
+        <div class="discover-meta muted">${r.matching_bands.length} of ${r.total_lineup_bands || '?'} lineup bands match</div>
+        <div class="discover-actions">
+          ${ingestBtn}
+          <a href="${r.festival_url}" target="_blank" rel="noopener" class="btn-secondary">View on MFW&nbsp;&#8599;</a>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+async function ingestMfwPoster(posterUrl, sourceUrl) {
+  showToast('<span style="color:var(--accent)">&#8635;</span> Ingesting poster&hellip;');
+  var body = new URLSearchParams({ poster_url: posterUrl, source_url: sourceUrl || '' });
+  try {
+    var data = await fetch('/discover/ingest', { method: 'POST', body }).then(r => r.json());
+    showToast('&#10003; <strong>' + (data.festival_name || 'Festival') + '</strong> ingested &mdash; '
+      + data.band_count + ' bands. Reloading&hellip;');
+    setTimeout(() => location.reload(), 2500);
+  } catch (e) {
+    showToast('Ingest failed: ' + e.message);
+  }
 }
 
 // ── De-duplicate ─────────────────────────────────────────────────────────
