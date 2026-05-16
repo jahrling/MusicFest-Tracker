@@ -553,6 +553,29 @@ kbd {
   max-width: 280px;
 }
 
+.festival-location-row {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  margin-bottom: 0.35rem;
+}
+
+.festival-location-text {
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.festival-location-row .rename-input {
+  font-size: 0.78rem;
+  font-weight: 400;
+  max-width: 220px;
+  padding: 0.05rem 0.35rem;
+}
+
+.festival-location-row .rename-btn {
+  font-size: 0.65rem;
+}
+
 /* ── Attended star pill ──────────────────────────────────────────────────── */
 .attended-pill {
   display: inline-flex;

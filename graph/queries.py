@@ -207,6 +207,22 @@ def rename_festival_group(old_name: str, new_name: str) -> int:
     return len(ids)
 
 
+def set_festival_group_location(name: str, location: str) -> int:
+    """Set location on every Festival node whose name == name. Returns count updated."""
+    conn = get_connection()
+    res = conn.execute(
+        "MATCH (f:Festival) WHERE f.name = $name RETURN f.id",
+        {"name": name},
+    )
+    ids = [row["f.id"] for row in _row_to_dict(res)]
+    for fid in ids:
+        conn.execute(
+            "MATCH (f:Festival {id: $id}) SET f.location = $location",
+            {"id": fid, "location": location},
+        )
+    return len(ids)
+
+
 def get_band_global_ranks() -> dict[str, float]:
     """
     For each band, return its normalized rank (0–100) from its most recent festival.

@@ -67,6 +67,12 @@
                   onclick="startRename('{{ group.name | e }}', 'fgn-{{ loop.index }}')"
                   title="Rename festival">&#9998;</button>
         </div>
+        <div class="festival-location-row">
+          <span class="festival-location-text" id="fgl-{{ loop.index }}">{{ group.location or 'Add location…' }}</span>
+          <button class="rename-btn"
+                  onclick="startLocationEdit('{{ group.name | e }}', 'fgl-{{ loop.index }}')"
+                  title="Edit location">&#9998;</button>
+        </div>
         <div class="festival-year-tags">
           {% for f in group.entries %}
           <span class="festival-year-group">
@@ -480,6 +486,49 @@ function startRename(oldName, labelId) {
     if (e.key === 'Escape') { committed = true; label.textContent = displayText; input.replaceWith(label); }
   });
   input.addEventListener('blur', doRename);
+  label.replaceWith(input);
+  input.focus();
+  input.select();
+}
+
+// ── Festival location edit ────────────────────────────────────────────────
+function startLocationEdit(festivalName, labelId) {
+  var label = document.getElementById(labelId);
+  if (!label) return;
+  var displayText = label.textContent.trim();
+
+  var input = document.createElement('input');
+  input.type = 'text';
+  input.value = displayText === 'Add location…' ? '' : displayText;
+  input.className = 'rename-input';
+  input.placeholder = 'e.g. Union Park, Chicago, IL';
+
+  var committed = false;
+  async function doSave() {
+    if (committed) return;
+    committed = true;
+    var newLoc = input.value.trim();
+    var unchanged = newLoc === displayText || (!newLoc && displayText === 'Add location…');
+    if (unchanged) { label.textContent = displayText; input.replaceWith(label); return; }
+    try {
+      var data = await fetch('/festivals/location', {
+        method: 'POST',
+        body: new URLSearchParams({ name: festivalName, location: newLoc }),
+      }).then(r => r.json());
+      showToast('Location updated for ' + data.updated + ' entr' + (data.updated === 1 ? 'y' : 'ies') + '.');
+      setTimeout(() => location.reload(), 1200);
+    } catch (e) {
+      showToast('Location update failed.');
+      label.textContent = displayText;
+      input.replaceWith(label);
+    }
+  }
+
+  input.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter')  { e.preventDefault(); doSave(); }
+    if (e.key === 'Escape') { committed = true; label.textContent = displayText; input.replaceWith(label); }
+  });
+  input.addEventListener('blur', doSave);
   label.replaceWith(input);
   input.focus();
   input.select();

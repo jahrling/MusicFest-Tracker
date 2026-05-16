@@ -227,5 +227,8 @@ document.body.addEventListener('htmx:beforeRequest', function (evt) {
 
 document.body.addEventListener('htmx:afterRequest', function (evt) {
   var form = evt.detail.elt;
-  if (form.tagName === 'FORM') form.classList.remove('form-submitting');
+  if (form.tagName === 'FORM') {
+    form.classList.remove('form-submitting');
+    form.querySelectorAll('input[type="file"]').forEach(function (inp) { inp.value = ''; });
+  }
 });

@@ -209,17 +209,17 @@ async def index(request: Request):
         city = _extract_city(f.get("location", ""))
         festival_groups[(f.get("name", ""), city)].append(f)
 
-    festivals_grouped = [
-        {
+    festivals_grouped = []
+    for (name, city), entries in sorted(festival_groups.items(), key=lambda x: x[0][0].lower()):
+        sorted_entries = sorted(entries, key=lambda f: f.get("start_date", ""), reverse=True)
+        rep_location = sorted_entries[0].get("location", "") if sorted_entries else ""
+        festivals_grouped.append({
             "name": name,
             "city": city,
             "display_name": f"{name} ({city})" if city else name,
-            "entries": sorted(entries, key=lambda f: f.get("start_date", ""), reverse=True),
-        }
-        for (name, city), entries in sorted(
-            festival_groups.items(), key=lambda x: x[0][0].lower()
-        )
-    ]
+            "location": rep_location,
+            "entries": sorted_entries,
+        })
 
     liked_count = queries.count_liked_artists()
     rated_high_count = sum(
@@ -558,6 +558,12 @@ async def rename_festival(old_name: str = Form(...), new_name: str = Form(...)):
     if not new_name:
         raise HTTPException(400, "New name cannot be empty")
     updated = queries.rename_festival_group(old_name, new_name)
+    return {"status": "ok", "updated": updated}
+
+
+@app.post("/festivals/location")
+async def set_festival_location(name: str = Form(...), location: str = Form(...)):
+    updated = queries.set_festival_group_location(name, location.strip())
     return {"status": "ok", "updated": updated}
 
 
