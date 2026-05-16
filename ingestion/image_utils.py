@@ -48,10 +48,8 @@ def load_image_as_base64(path: Path) -> tuple[str, str]:
 
     # Open and optionally resize with Pillow
     img = Image.open(path)
-    if img.mode not in ("RGB", "RGBA"):
-        img = img.convert("RGB")
 
-    # Downscale if needed
+    # Downscale if needed before any conversion (saves memory)
     w, h = img.size
     if max(w, h) > MAX_DIMENSION:
         scale = MAX_DIMENSION / max(w, h)
@@ -59,6 +57,15 @@ def load_image_as_base64(path: Path) -> tuple[str, str]:
 
     buf = io.BytesIO()
     fmt = "JPEG" if suffix in (".jpg", ".jpeg") else "PNG"
+
+    # JPEG doesn't support transparency — flatten RGBA/P onto white
+    if fmt == "JPEG" and img.mode in ("RGBA", "P", "LA"):
+        background = Image.new("RGB", img.size, (255, 255, 255))
+        background.paste(img, mask=img.split()[-1] if img.mode in ("RGBA", "LA") else None)
+        img = background
+    elif img.mode not in ("RGB", "RGBA", "L"):
+        img = img.convert("RGB")
+
     img.save(buf, format=fmt)
     media_type = "image/jpeg" if fmt == "JPEG" else "image/png"
     return base64.standard_b64encode(buf.getvalue()).decode(), media_type
