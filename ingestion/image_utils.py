@@ -5,34 +5,66 @@ from __future__ import annotations
 import base64
 import hashlib
 import mimetypes
+import re
 from pathlib import Path
-from urllib.parse import urlparse
 
 import httpx
 from PIL import Image
 import io
 
-from config import POSTERS_DIR, SCRAPE_DELAY_SECONDS
+from config import POSTERS_DIR
 
 
 SUPPORTED_MIME = {"image/jpeg", "image/png", "image/webp", "application/pdf"}
 MAX_DIMENSION = 4096  # pixels — keep within Claude vision limits
 
+_CONTENT_TYPE_EXT = {
+    "image/jpeg": ".jpg",
+    "image/png": ".png",
+    "image/webp": ".webp",
+    "image/avif": ".avif",
+    "image/gif": ".gif",
+    "application/pdf": ".pdf",
+}
+
+
+def _rewrite_cdn_url(url: str) -> str:
+    """
+    Rewrite CDN transformation URLs that default to AVIF to request JPEG instead.
+
+    Wix image URLs embed format parameters like enc_avif in the path.
+    Replacing with enc_jpg makes the CDN serve a format Pillow can open.
+    """
+    if "wixstatic.com" in url:
+        url = re.sub(r"\benc_avif\b", "enc_jpg", url)
+        url = re.sub(r"\bquality_auto\b", "q_85", url)
+    return url
+
 
 def download_poster(url: str) -> Path:
     """Download poster from URL, save to POSTERS_DIR, return local path."""
+    url = _rewrite_cdn_url(url)
+
     resp = httpx.get(url, follow_redirects=True, timeout=30)
     resp.raise_for_status()
 
     content_type = resp.headers.get("content-type", "").split(";")[0].strip()
-    ext = mimetypes.guess_extension(content_type) or ".jpg"
+
+    # Use actual content-type for extension — URL extension is unreliable after CDN rewrites
+    ext = _CONTENT_TYPE_EXT.get(content_type) or mimetypes.guess_extension(content_type) or ".jpg"
     if ext == ".jpe":
         ext = ".jpg"
 
-    # Stable filename from URL hash
+    if ext == ".avif":
+        raise ValueError(
+            "This URL serves an AVIF image, which isn't supported by the image library. "
+            "Download the poster manually and upload the file instead, "
+            "or find a JPEG/PNG version of the image."
+        )
+
+    # Stable filename from the (possibly rewritten) URL
     url_hash = hashlib.sha256(url.encode()).hexdigest()[:16]
-    filename = f"{url_hash}{ext}"
-    dest = POSTERS_DIR / filename
+    dest = POSTERS_DIR / f"{url_hash}{ext}"
     dest.write_bytes(resp.content)
     return dest
 
