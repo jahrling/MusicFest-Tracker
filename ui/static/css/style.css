@@ -535,6 +535,7 @@ kbd {
 }
 
 .festival-group-header:hover .rename-btn,
+.festival-location-row:hover .rename-btn,
 .rename-btn:focus {
   opacity: 1;
   color: var(--accent-hover);

@@ -68,7 +68,9 @@
                   title="Rename festival">&#9998;</button>
         </div>
         <div class="festival-location-row">
-          <span class="festival-location-text" id="fgl-{{ loop.index }}">{{ group.location or 'Add location…' }}</span>
+          <span class="festival-location-text" id="fgl-{{ loop.index }}"
+                onclick="startLocationEdit('{{ group.name | e }}', 'fgl-{{ loop.index }}')"
+                style="cursor:pointer">{{ group.location or 'Add location…' }}</span>
           <button class="rename-btn"
                   onclick="startLocationEdit('{{ group.name | e }}', 'fgl-{{ loop.index }}')"
                   title="Edit location">&#9998;</button>
