@@ -379,6 +379,63 @@ async def research_band_api(band_id: str):
     return {"success": success, "band": updated}
 
 
+@app.post("/bands/{band_id}/find-festivals", response_class=HTMLResponse)
+async def find_band_festivals_api(band_id: str):
+    band = queries.get_band(band_id)
+    if not band:
+        raise HTTPException(404, "Band not found")
+    from research.band_agent import find_band_festivals
+
+    band_name = band.get("name", band_id)
+    try:
+        result = find_band_festivals(band_name)
+    except Exception as exc:
+        log.exception("Find festivals failed for %s", band_name)
+        return HTMLResponse(
+            f'<div class="ingest-error">Find festivals failed: {exc}</div>'
+        )
+
+    festivals = result.get("festivals", [])
+    notes = result.get("notes", "")
+
+    if not festivals:
+        msg = notes or "No festival appearances found in the last 5 years."
+        return HTMLResponse(f'<p class="muted">{msg}</p>')
+
+    rows = ""
+    for f in festivals:
+        name = (f.get("name") or "").strip() or "—"
+        loc = (f.get("location") or "").strip() or "—"
+        date = (f.get("date") or "").strip() or "—"
+        status = (f.get("status") or "").strip()
+        source = (f.get("source") or "").strip()
+        status_tag = (
+            f'<span class="tag">{status}</span>' if status else ""
+        )
+        source_html = (
+            f'<br><span class="muted" style="font-size:0.75rem">source: {source}</span>'
+            if source else ""
+        )
+        rows += (
+            f'<tr>'
+            f'<td><strong>{name}</strong>{source_html}</td>'
+            f'<td>{date}</td>'
+            f'<td>{loc}</td>'
+            f'<td>{status_tag}</td>'
+            f'</tr>'
+        )
+    notes_html = f'<p class="muted" style="font-size:0.8rem">{notes}</p>' if notes else ""
+    return HTMLResponse(
+        f'<div class="find-festivals-results">'
+        f'<table class="data-table">'
+        f'<thead><tr><th>Festival</th><th>Date</th><th>Location</th><th>Status</th></tr></thead>'
+        f'<tbody>{rows}</tbody>'
+        f'</table>'
+        f'{notes_html}'
+        f'</div>'
+    )
+
+
 @app.post("/research/batch")
 async def research_batch_api(festival_id: str = Form(...)):
     timeline = queries.get_full_timeline()

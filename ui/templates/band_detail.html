@@ -60,6 +60,14 @@
         <span id="research-spinner" class="htmx-indicator">Researching...</span>
         <div id="research-status"></div>
       </div>
+
+      <div class="action-row">
+        <form hx-post="/bands/{{ band.id }}/find-festivals" hx-target="#find-festivals-results" hx-swap="innerHTML" hx-indicator="#find-festivals-spinner">
+          <button type="submit" class="btn-secondary">Find Festivals (web search)</button>
+        </form>
+        <span id="find-festivals-spinner" class="htmx-indicator">Searching the web for festival appearances...</span>
+        <div id="find-festivals-results"></div>
+      </div>
     </div>
 
     <!-- Rating card -->
