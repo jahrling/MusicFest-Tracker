@@ -110,6 +110,69 @@ def research_band(band_name: str) -> BandResearch:
     )
 
 
+FESTIVAL_FINDER_SYSTEM = """You are a music research assistant specializing in festival lineups.
+Use web search to find festival appearances for a specific artist.
+Always return ONLY valid JSON with no markdown fences."""
+
+
+FESTIVAL_FINDER_PROMPT = """Find festivals that {band_name} has played at in the last 5 years, or is scheduled to play at upcoming.
+
+Sources to check (in order):
+1. The band's official website tour/shows page.
+2. Their social media (Instagram, X/Twitter, Facebook) tour announcements.
+3. Songkick, Bandsintown, setlist.fm artist pages.
+4. Festival lineup announcements that mention the band.
+
+Return a JSON object with this exact schema:
+{{
+  "festivals": [
+    {{
+      "name": "Festival Name",
+      "location": "City, ST or City, Country",
+      "date": "YYYY-MM-DD or YYYY",
+      "status": "past|upcoming",
+      "source": "where you found it (e.g. 'band's website', 'Songkick')"
+    }}
+  ],
+  "notes": "one sentence on coverage/confidence (e.g. 'tour page only lists 2025-2026')"
+}}
+
+Only include actual music festivals — not headlining club tours or one-off concerts.
+If you cannot find any festival appearances, return an empty festivals array.
+"""
+
+
+def find_band_festivals(band_name: str) -> dict:
+    """Use Claude with web search to find festival appearances for a band.
+
+    Returns a dict with 'festivals' (list) and 'notes' (string).
+    Not persisted to the graph — caller decides what to do with results.
+    """
+    client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+
+    prompt = FESTIVAL_FINDER_PROMPT.format(band_name=band_name)
+
+    message = client.messages.create(
+        model=CLAUDE_MODEL,
+        max_tokens=2048,
+        system=FESTIVAL_FINDER_SYSTEM,
+        tools=[{"type": "web_search_20250305", "name": "web_search"}],
+        messages=[{"role": "user", "content": prompt}],
+    )
+
+    raw = ""
+    for block in message.content:
+        if block.type == "text":
+            raw = block.text.strip()
+
+    data = _safe_parse(raw)
+    return {
+        "festivals": data.get("festivals", []),
+        "notes": data.get("notes", ""),
+        "raw_response": raw,
+    }
+
+
 def _safe_parse(raw: str) -> dict:
     text = raw.strip()
     text = re.sub(r"^```(?:json)?\s*", "", text, flags=re.IGNORECASE)
